@@ -147,6 +147,22 @@ def chunk_code(code: str, language: str | None = None, path: str = "", extension
                 chunks.append({"text": json.dumps({key: value}, indent=2), "path": path, "language": language, "type": "json", "key": key})
         return chunks
 
+    ## special case for markdown files: split into chunks based on headers
+    if extension == ".md":
+        curChunk = ""
+        for line in code.split("\n"):
+            if line.isspace():
+                continue    ## skip empty lines
+            if line.startswith("#"):
+                if curChunk.strip():
+                    chunks.append({"text": curChunk, "path": path, "language": language, "type": "text"})
+                curChunk = line + "\n"
+            else:
+                curChunk += line + "\n"
+        if curChunk.strip():
+            chunks.append({"text": curChunk, "path": path, "language": language, "type": "text"})
+        return chunks
+
     ## traverse the tree through a stack and append valid chunks to the list
     while work:
         node = work.pop()
