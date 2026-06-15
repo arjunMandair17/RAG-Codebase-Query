@@ -1,0 +1,12 @@
+{
+    "name": "example.py",
+    "language": "python",
+    "chunks": [
+        {
+            "text": "print('Hello, world!')",
+            "path": "example.py",
+            "language": "python",
+            "type": "function_definition"
+        }
+    ]
+}

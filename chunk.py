@@ -131,6 +131,7 @@ def chunk_code(code: str, language: str | None = None, path: str = "") -> list[d
     raw = code.encode()
     chunks, work = [], [get_parser(language).parse(code).root_node()] if language in CHUNK_TYPES else []
 
+    ## traverse the tree through a stack and append valid chunks to the list
     while work:
         node = work.pop()
         if node.kind() in CHUNK_TYPES[language]:
@@ -138,6 +139,7 @@ def chunk_code(code: str, language: str | None = None, path: str = "") -> list[d
         else:
             work.extend(node.child(i) for i in range(node.child_count()))
 
+    ## fallback: if there were no valid chunks, split code on double newlines and append as text chunks
     if not chunks:
         for part in re.split(r"\n{2,}", code.strip()):
             if part.strip():
