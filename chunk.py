@@ -1,6 +1,7 @@
 import os
 import re
 from urllib.parse import urlparse
+import json
 
 import httpx
 from tree_sitter_language_pack import get_language, get_parser
@@ -23,6 +24,7 @@ LANGUAGES = {
     ".java": "java",
     ".rs": "rust",
     ".go": "go",
+    ".json": "json"
 }
 
 # Skip common non-source directories
@@ -126,10 +128,24 @@ CHUNK_TYPES = {
     "go": {"function_declaration", "method_declaration", "type_declaration"},
 }
 
-def chunk_code(code: str, language: str | None = None, path: str = "") -> list[dict]:
+def chunk_code(code: str, language: str | None = None, path: str = "", extension: str = "") -> list[dict]:
     """Chunk code into text + metadata dicts ready for embedding and vector DB storage."""
     raw = code.encode()
     chunks, work = [], [get_parser(language).parse(code).root_node()] if language in CHUNK_TYPES else []
+
+    ## special case for json files: split into key-value pairs
+    if extension == ".json":
+        data = json.loads(code)
+        for key, value in data.items():
+            if isinstance(value, list):
+                for item in value:
+                    chunks.append({"text": json.dumps(item), "path": path, "language": language, "type": "json", "key": key})
+            elif isinstance(value, dict):
+                for second_key, second_value in value.items():
+                    chunks.append({"text": json.dumps(second_value), "path": path, "language": language, "type": "json", "key": key, "second_key": second_key})
+            else:
+                chunks.append({"text": json.dumps({key: value}, indent=2), "path": path, "language": language, "type": "json", "key": key})
+        return chunks
 
     ## traverse the tree through a stack and append valid chunks to the list
     while work:
@@ -137,7 +153,7 @@ def chunk_code(code: str, language: str | None = None, path: str = "") -> list[d
         if node.kind() in CHUNK_TYPES[language]:
             chunks.append({"text": raw[node.start_byte():node.end_byte()].decode(), "path": path, "language": language, "type": node.kind()})
         else:
-            work.extend(node.child(i) for i in range(node.child_count()))
+            work.extend(node.child(i) for i in range(node.child_count()))        
 
     ## fallback: if there were no valid chunks, split code on double newlines and append as text chunks
     if not chunks:

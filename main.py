@@ -5,5 +5,5 @@ github_url = "https://github.com/arjunMandair17/RAG-Codebase-Query"
 files = parse_code(github_url)
 
 for file in files:
-    chunks = chunk_code(file["content"], file["language"], file["path"])
+    chunks = chunk_code(file["content"], file["language"], file["path"], file["extension"])
     print(chunks)
