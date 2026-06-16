@@ -1,2 +1,5 @@
 httpx
 tree-sitter-language-pack
+chromadb
+google-generativeai
+python-dotenv
