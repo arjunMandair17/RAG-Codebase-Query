@@ -1,7 +1,9 @@
 httpx
 tree-sitter-language-pack
 chromadb
-google-generativeai
 python-dotenv
 fastapi
 uvicorn
+pydantic
+google-generativeai
+google-genai

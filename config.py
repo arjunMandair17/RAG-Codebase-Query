@@ -18,14 +18,15 @@ CHROMA_HOST = os.getenv("CHROMA_HOST")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 
 GEMINI_EMBEDDING_KEY = os.getenv("GEMINI_EMBEDDING_KEY")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 
 
 def get_embedding_function():
     """Build the Gemini embedding function used by the Chroma collection."""
-    return embedding_functions.GoogleGenerativeAiEmbeddingFunction(
-        model_name=EMBEDDING_MODEL,
-        api_key=GEMINI_EMBEDDING_KEY,
+    model_name = EMBEDDING_MODEL.removeprefix("models/")
+    return embedding_functions.GoogleGeminiEmbeddingFunction(
+        model_name=model_name,
+        api_key_env_var="GEMINI_EMBEDDING_KEY",
     )
 
 
