@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from models.ingest import IngestRequest
 
 from chunk import parse_code, chunk_code
+from embedding import embed_chunks
 
 router = APIRouter(
     prefix="/ingest",
@@ -27,4 +28,7 @@ async def ingest(body: IngestRequest):
         chunks.extend(chunk_code(file["content"], file["language"], file["path"], file["extension"]))
 
     ## embed the chunks
-    embeddings = embed_chunks(chunks)
+    if not embed_chunks(chunks):
+        raise HTTPException(status_code=500, detail="Error embedding chunks")
+    
+    return {"message": "Chunks embedded successfully"}

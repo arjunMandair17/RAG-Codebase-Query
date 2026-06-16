@@ -1,44 +1,33 @@
-import chromadb
-import os
-from chromadb.utils import embedding_functions
-from dotenv import load_dotenv
+from config import collection
 
 
-load_dotenv()
+def embed_chunks(chunks: list[dict]) -> bool:
+    """Embed and store chunks in Chroma."""
+    for chunk in chunks:
+        try:
+            collection.add(
+                documents=[chunk["text"]],
+                metadatas=[
+                    {
+                        "path": chunk["path"],
+                        "language": chunk["language"],
+                        "type": chunk["type"],
+                    }
+                ],
+            )
+        except Exception as e:
+            print(f"Error embedding chunk: {e}")
+            continue
+    if collection.count() != len(chunks):
+        raise Exception("Error embedding chunks")
+    return True
 
 
-gemini_embedding_function = embedding_functions.GoogleGenerativeAiEmbeddingFunction(
-    model_name="models/gemini-embedding-001",
-    api_key=os.getenv("GEMINI_EMBEDDING_KEY")
-)
-
-chroma_client = chromadb.PersistentClient(path="db")
-collection = chroma_client.get_or_create_collection(
-    name="codebase", 
-    embedding_function=gemini_embedding_function
-)
-
-def embed_chunks(chunks: list[dict]) -> list[dict]:
-    return [
-        collection.add(
-            documents=[chunk["text"]],
-            metadatas=[
-                {
-                    "path": chunk["path"], 
-                    "language": chunk["language"], 
-                    "type": chunk["type"], 
-                    "extension": chunk["extension"]
-                }
-            ]
-        )
-        for chunk in chunks
-    ]
-
-
-def create_embedding(query: str) -> list[float]:
+def query_chunks(query: str) -> list[dict]:
+    """Query Chroma for chunks similar to the given text."""
     results = collection.query(
         query_texts=[query],
         n_results=8,
-        include=["distances", "documents", "metadatas"]
+        include=["distances", "documents", "metadatas"],
     )
-    return results
+    return results["documents"]

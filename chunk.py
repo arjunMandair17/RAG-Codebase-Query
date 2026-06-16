@@ -130,6 +130,10 @@ CHUNK_TYPES = {
 
 def chunk_code(code: str, language: str | None = None, path: str = "", extension: str = "") -> list[dict]:
     """Chunk code into text + metadata dicts ready for embedding and vector DB storage."""
+
+    if not language:
+        language = LANGUAGES.get(extension) or "text"
+    
     raw = code.encode()
     chunks, work = [], [get_parser(language).parse(code).root_node()] if language in CHUNK_TYPES else []
 
