@@ -50,7 +50,7 @@ def query_chunks(query: str) -> list[str]:
     """Query Chroma for chunks similar to the given text."""
     results = collection.query(
         query_texts=[query],
-        n_results=8,
+        n_results=10,
         include=["distances", "documents", "metadatas"],
     )
     return results["documents"][0] if results["documents"] else []
