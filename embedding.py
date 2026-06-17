@@ -1,5 +1,5 @@
 import hashlib
-
+import os
 from config import collection
 
 
@@ -14,24 +14,28 @@ def embed_chunks(chunks: list[dict]) -> bool:
     if not chunks:
         return True
 
-    failed = 0
-    for chunk in chunks:
+    failed = False
+    batch_size = int(os.getenv("BATCH_SIZE", "50"))
+
+    for i in range(0, len(chunks), batch_size):
+        curBatch = chunks[i:i + batch_size]
         try:
             collection.upsert(
-                ids=[_chunk_id(chunk)],
-                documents=[chunk["text"]],
+                ids=[_chunk_id(chunk) for chunk in curBatch],
+                documents=[chunk["text"] for chunk in curBatch],
                 metadatas=[
                     {
                         "path": chunk["path"],
                         "language": chunk.get("language") or "unknown",
                         "type": chunk["type"],
                     }
+                    for chunk in curBatch
                 ],
             )
         except Exception as e:
-            print(f"Error embedding chunk: {e}")
-            failed += 1
-    return failed == 0
+            print(f"Error embedding batch: {e}")
+            failed = True
+    return not failed
 
 
 def clear_collection() -> bool:

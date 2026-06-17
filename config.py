@@ -27,6 +27,7 @@ def get_embedding_function():
     return embedding_functions.GoogleGeminiEmbeddingFunction(
         model_name=model_name,
         api_key_env_var="GEMINI_EMBEDDING_KEY",
+        task_type="RETRIEVAL_DOCUMENT"
     )
 
 
