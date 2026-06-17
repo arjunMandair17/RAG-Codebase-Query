@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 from urllib.parse import urlparse
@@ -7,7 +8,7 @@ import httpx
 from tree_sitter_language_pack import get_language, get_parser
 
 GITHUB_API = "https://api.github.com"
-
+MAX_CONCURRENT_FETCHES = 20
 # Extensions worth indexing for RAG over a codebase
 RELEVANT_EXTENSIONS = {
     ".py", ".js", ".ts", ".tsx", ".jsx",
@@ -53,11 +54,11 @@ def _github_headers(token: str | None) -> dict[str, str]:
     return headers
 
 
-def _fetch_file_tree(
-    client: httpx.Client, owner: str, repo: str, branch: str, headers: dict[str, str]
+async def _fetch_file_tree(
+    client: httpx.AsyncClient, owner: str, repo: str, branch: str, headers: dict[str, str]
 ) -> list[str]:
     """List all relevant file paths in a repo via the Git Trees API."""
-    resp = client.get(
+    resp = await client.get(
         f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{branch}",
         params={"recursive": "1"},
         headers=headers,
@@ -77,45 +78,51 @@ def _fetch_file_tree(
     return paths
 
 
-def _fetch_file_content(
-    client: httpx.Client, owner: str, repo: str, branch: str, path: str
+async def _fetch_file_content(
+    client: httpx.AsyncClient, owner: str, repo: str, branch: str, path: str
 ) -> str:
     """Download a single file's text content via raw.githubusercontent.com."""
-    resp = client.get(
+    resp = await client.get(
         f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}",
     )
     resp.raise_for_status()
     return resp.text
 
 
-def parse_code(github_url: str) -> list[dict]:
+async def parse_code(github_url: str) -> list[dict]:
     """
-    Fetch text files from a public GitHub repo.
+    Fetch text files from a public GitHub repo in parallel.
 
     Returns a list of dicts with keys: path, content, extension, language.
-    language is set for code files (for tree-sitter later); None for plain text/json/md.
     """
     owner, repo, branch = parse_github_url(github_url)
     headers = _github_headers(None)
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
 
-    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        timeout=30.0,
+        follow_redirects=True,
+        limits=httpx.Limits(max_connections=MAX_CONCURRENT_FETCHES),
+    ) as client:
         if not branch:
-            resp = client.get(f"{GITHUB_API}/repos/{owner}/{repo}", headers=headers)
+            resp = await client.get(f"{GITHUB_API}/repos/{owner}/{repo}", headers=headers)
             resp.raise_for_status()
             branch = resp.json()["default_branch"]
 
-        paths = _fetch_file_tree(client, owner, repo, branch, headers)
+        paths = await _fetch_file_tree(client, owner, repo, branch, headers)
 
-        files = []
-        for path in paths:
+        async def fetch_file(path: str) -> dict:
+            async with semaphore:
+                content = await _fetch_file_content(client, owner, repo, branch, path)
             ext = os.path.splitext(path)[1].lower()
-            files.append({
+            return {
                 "path": path,
-                "content": _fetch_file_content(client, owner, repo, branch, path),
+                "content": content,
                 "extension": ext,
                 "language": LANGUAGES.get(ext),
-            })
-        return files
+            }
+
+        return list(await asyncio.gather(*[fetch_file(path) for path in paths]))
 
 
 
