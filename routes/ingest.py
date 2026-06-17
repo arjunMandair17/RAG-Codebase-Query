@@ -3,8 +3,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from models.ingest import IngestRequest
 
-from chunk import chunk_code, parse_code
-from embedding import clear_collection, embed_chunks
+from services.chunk import chunk_code, parse_code
+from services.embedding import clear_collection, embed_chunks
 
 router = APIRouter(
     prefix="/ingest",

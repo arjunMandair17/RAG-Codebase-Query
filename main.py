@@ -1,5 +1,5 @@
-from chunk import parse_code, chunk_code
-from embedding import clear_collection
+from services.chunk import parse_code, chunk_code
+from services.embedding import clear_collection
 import requests
 
 github_url = "https://github.com/arjunMandair17/Job-Application-Tracker"

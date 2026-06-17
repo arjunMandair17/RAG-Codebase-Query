@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from models.retrieve import RetrieveRequest
-from llm import generate_response
+from services.llm import generate_response
 
 router = APIRouter(
     prefix="/retrieve",

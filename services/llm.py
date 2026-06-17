@@ -3,7 +3,7 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-from embedding import query_chunks
+from services.embedding import query_chunks
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_EMBEDDING_KEY"))
