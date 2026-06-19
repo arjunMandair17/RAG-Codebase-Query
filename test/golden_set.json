@@ -1,0 +1,42 @@
+[
+  {
+    "query": "Where is chunking implemented?",
+    "expected_paths": ["services/chunk.py", "chunk.py"],
+    "expected_keywords": ["chunk_code", "tree-sitter"]
+  },
+  {
+    "query": "How does the ingest endpoint work?",
+    "expected_paths": ["routes/ingest.py"],
+    "expected_keywords": ["parse_code", "embed_chunks"]
+  },
+  {
+    "query": "Where are embeddings stored?",
+    "expected_paths": ["services/embedding.py", "config.py"],
+    "expected_keywords": ["Chroma", "collection"]
+  },
+  {
+    "query": "How does the LLM generate answers?",
+    "expected_paths": ["services/llm.py"],
+    "expected_keywords": ["query_chunks", "generate_content"]
+  },
+  {
+    "query": "What handles GitHub file fetching?",
+    "expected_paths": ["services/chunk.py", "chunk.py"],
+    "expected_keywords": ["parse_code", "github"]
+  },
+  {
+    "query": "Where is the Streamlit frontend?",
+    "expected_paths": ["frontend/ui.py"],
+    "expected_keywords": ["streamlit", "ingest"]
+  },
+  {
+    "query": "How is the Chroma database configured?",
+    "expected_paths": ["config.py"],
+    "expected_keywords": ["CHROMA_DB_PATH", "PersistentClient"]
+  },
+  {
+    "query": "What API endpoint clears the vector database?",
+    "expected_paths": ["routes/ingest.py"],
+    "expected_keywords": ["delete", "clear_collection"]
+  }
+]

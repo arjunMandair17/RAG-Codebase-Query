@@ -11,7 +11,7 @@ def _chunk_id(chunk: dict) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:32]
 
 
-def embed_chunks(chunks: list[dict]) -> bool:
+def embed_chunks(chunks: list[dict], stats: dict | None = None) -> bool:
     """Embed and store chunks in Chroma."""
     if not chunks:
         return True
@@ -22,6 +22,7 @@ def embed_chunks(chunks: list[dict]) -> bool:
 
     for i in range(0, len(chunks), batch_size):
         curBatch = chunks[i:i + batch_size]
+        batch_ok = False
         for attempt in range(5):
             try:
                 collection.upsert(
@@ -36,16 +37,30 @@ def embed_chunks(chunks: list[dict]) -> bool:
                         for chunk in curBatch
                     ],
                 )
+                batch_ok = True
+                if stats is not None:
+                    stats["batches_ok"] = stats.get("batches_ok", 0) + 1
+                    stats["chunks_embedded"] = stats.get("chunks_embedded", 0) + len(curBatch)
                 break
             except Exception as e:
                 err = str(e).lower()
                 if attempt < 4 and any(x in err for x in ("429", "rate", "quota", "too many")):
+                    if stats is not None:
+                        stats["rate_limit_retries"] = stats.get("rate_limit_retries", 0) + 1
                     time.sleep(batch_delay * (2 ** attempt))
                     continue
                 print(f"Error embedding batch: {e}")
+                if stats is not None:
+                    stats["other_errors"] = stats.get("other_errors", 0) + 1
                 failed = True
                 break
-        if not failed and i + batch_size < len(chunks):
+        if not batch_ok and not failed:
+            failed = True
+        if failed:
+            if stats is not None:
+                stats["batches_failed"] = stats.get("batches_failed", 0) + 1
+            break
+        if i + batch_size < len(chunks):
             time.sleep(batch_delay)
 
     return not failed
