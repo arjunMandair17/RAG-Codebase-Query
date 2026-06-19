@@ -1,5 +1,7 @@
 import hashlib
 import os
+import time
+
 from config import collection
 
 
@@ -15,26 +17,37 @@ def embed_chunks(chunks: list[dict]) -> bool:
         return True
 
     failed = False
-    batch_size = int(os.getenv("BATCH_SIZE", "50"))
+    batch_size = int(os.getenv("BATCH_SIZE", "30"))
+    batch_delay = float(os.getenv("EMBED_BATCH_DELAY", "1"))
 
     for i in range(0, len(chunks), batch_size):
         curBatch = chunks[i:i + batch_size]
-        try:
-            collection.upsert(
-                ids=[_chunk_id(chunk) for chunk in curBatch],
-                documents=[chunk["text"] for chunk in curBatch],
-                metadatas=[
-                    {
-                        "path": chunk["path"],
-                        "language": chunk.get("language") or "unknown",
-                        "type": chunk["type"],
-                    }
-                    for chunk in curBatch
-                ],
-            )
-        except Exception as e:
-            print(f"Error embedding batch: {e}")
-            failed = True
+        for attempt in range(5):
+            try:
+                collection.upsert(
+                    ids=[_chunk_id(chunk) for chunk in curBatch],
+                    documents=[chunk["text"] for chunk in curBatch],
+                    metadatas=[
+                        {
+                            "path": chunk["path"],
+                            "language": chunk.get("language") or "unknown",
+                            "type": chunk["type"],
+                        }
+                        for chunk in curBatch
+                    ],
+                )
+                break
+            except Exception as e:
+                err = str(e).lower()
+                if attempt < 4 and any(x in err for x in ("429", "rate", "quota", "too many")):
+                    time.sleep(batch_delay * (2 ** attempt))
+                    continue
+                print(f"Error embedding batch: {e}")
+                failed = True
+                break
+        if not failed and i + batch_size < len(chunks):
+            time.sleep(batch_delay)
+
     return not failed
 
 
