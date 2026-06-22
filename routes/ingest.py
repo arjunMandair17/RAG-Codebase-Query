@@ -1,10 +1,10 @@
-import asyncio
-
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from models.ingest import IngestRequest
 
-from services.chunk import chunk_code, parse_code
-from services.embedding import clear_collection, embed_chunks
+from services import ingest_job
+from services.embedding import clear_collection
+import asyncio
 
 router = APIRouter(
     prefix="/ingest",
@@ -12,42 +12,40 @@ router = APIRouter(
 )
 
 
-def _chunk_and_embed(files: list[dict]) -> int:
-    """Chunk files and store embeddings; returns number of chunks stored."""
-    chunks = []
-    for file in files:
-        chunks.extend(
-            chunk_code(file["content"], file["language"], file["path"], file["extension"])
-        )
-    if not embed_chunks(chunks):
-        raise RuntimeError("Error embedding chunks")
-    return len(chunks)
-
-
 @router.post("/")
-async def ingest(body: IngestRequest):
-    """Fetch a GitHub repo, chunk it, and store embeddings in Chroma."""
+async def ingest(body: IngestRequest, sync: bool = False):
+    """Start ingesting a GitHub repo (background by default) or block until finished."""
     github_url = body.github_url
 
     if not github_url or github_url == "" or not github_url.startswith("https://github.com/"):
         raise HTTPException(status_code=400, detail="GitHub URL is invalid")
 
-    try:
-        files = await parse_code(github_url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch repo: {e}")
+    if ingest_job.is_running():
+        raise HTTPException(status_code=409, detail="Ingest already in progress")
 
-    try:
-        chunks_stored = await asyncio.to_thread(_chunk_and_embed, files)
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if sync:
+        try:
+            chunks_stored = await ingest_job.run_ingest_blocking(github_url)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        return {"message": "Chunks embedded successfully", "chunks_stored": chunks_stored}
 
-    return {"message": "Chunks embedded successfully", "chunks_stored": chunks_stored}
+    ingest_job.start(github_url)
+    return JSONResponse(status_code=202, content={"status": "started"})
+
+
+@router.get("/status")
+async def ingest_status():
+    """Return progress for the current or most recent background ingest job."""
+    return ingest_job.get_status()
 
 
 @router.delete("/")
 async def delete():
     """Clear all embedded chunks from the collection."""
+    if ingest_job.is_running():
+        raise HTTPException(status_code=409, detail="Cannot clear collection while ingest is running")
+
     cleared = await asyncio.to_thread(clear_collection)
     if not cleared:
         raise HTTPException(status_code=500, detail="Error clearing collection")

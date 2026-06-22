@@ -7,12 +7,39 @@ from config import collection
 
 def _chunk_id(chunk: dict) -> str:
     """Build a stable id for upserting chunks without duplicates on re-ingest."""
-    key = f"{chunk['path']}|{chunk['text']}"
-    return hashlib.sha256(key.encode()).hexdigest()[:32]
+    key = "|".join(
+        [
+            chunk["path"],
+            chunk.get("type", ""),
+            str(chunk.get("key", "")),
+            str(chunk.get("second_key", "")),
+            chunk["text"],
+        ]
+    )
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _dedupe_chunks(chunks: list[dict], stats: dict | None = None) -> list[dict]:
+    """Drop chunks that share the same id (identical content); Chroma upsert requires unique ids per batch."""
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for chunk in chunks:
+        cid = _chunk_id(chunk)
+        if cid in seen:
+            if stats is not None:
+                stats["duplicates_skipped"] = stats.get("duplicates_skipped", 0) + 1
+            continue
+        seen.add(cid)
+        unique.append(chunk)
+    return unique
 
 
 def embed_chunks(chunks: list[dict], stats: dict | None = None) -> bool:
     """Embed and store chunks in Chroma."""
+    if not chunks:
+        return True
+
+    chunks = _dedupe_chunks(chunks, stats=stats)
     if not chunks:
         return True
 

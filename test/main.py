@@ -17,7 +17,11 @@ if confirm == "n":
 response = requests.delete("http://localhost:8000/ingest")
 print(response.json())
 
-response = requests.post("http://localhost:8000/ingest", json={"github_url": github_url})
+response = requests.post(
+    "http://localhost:8000/ingest",
+    json={"github_url": github_url},
+    params={"sync": True},
+)
 print(response.json())
 
 while True:
