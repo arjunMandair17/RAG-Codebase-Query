@@ -122,7 +122,8 @@ async def parse_code(github_url: str) -> list[dict]:
                 "language": LANGUAGES.get(ext),
             }
 
-        return list(await asyncio.gather(*[fetch_file(path) for path in paths]))
+        ## skip package-lock.json, yarn.lock, and pnpm-lock.yaml
+        return list(await asyncio.gather(*[fetch_file(path) for path in paths if not any(path.contains(x) for x in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"])]))
 
 
 
