@@ -5,14 +5,22 @@ import streamlit as st
 
 BASE_URL = "http://localhost:8000"
 
-if "codebase_ingested" not in st.session_state:
-    st.session_state.codebase_ingested = False
-if "ingesting" not in st.session_state:
-    st.session_state.ingesting = False
+for key, default in {
+    "codebase_ingested": False,
+    "ingesting": False,
+    "retrieving": False,
+    "clearing": False,
+    "pending_query": None,
+    "last_answer": None,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 
 def sync_ui_state() -> None:
     """Align session state with the API after a page reload."""
+    if st.session_state.retrieving or st.session_state.clearing:
+        return
     if st.session_state.codebase_ingested and not st.session_state.ingesting:
         return
 
@@ -49,7 +57,7 @@ def poll_ingest_status() -> None:
         phase = status.get("phase", "working")
         embedded = status.get("chunks_embedded", 0)
         total = status.get("chunks_total") or "?"
-        st.info(f"Ingesting... {phase} ({embedded}/{total} chunks embedded)")
+        st.caption(f"{phase} — {embedded}/{total} chunks embedded")
         time.sleep(2)
         st.rerun()
     elif state == "complete":
@@ -64,18 +72,64 @@ def poll_ingest_status() -> None:
         st.session_state.ingesting = False
 
 
+def run_retrieve() -> None:
+    """Call the retrieve API and store the answer in session state."""
+    query = st.session_state.pending_query
+    try:
+        response = requests.post(
+            f"{BASE_URL}/retrieve",
+            json={"query": query},
+            timeout=120,
+        )
+    except requests.RequestException:
+        st.session_state.last_answer = None
+        st.error("Could not reach API. Is the server running on port 8000?")
+    else:
+        if response.status_code == 200:
+            st.session_state.last_answer = response.json()["answer"]
+        else:
+            st.session_state.last_answer = None
+            st.error("Error retrieving answer, please try again.")
+
+    st.session_state.retrieving = False
+    st.session_state.pending_query = None
+
+
+def run_clear() -> None:
+    """Clear the vector DB and return to the ingest screen."""
+    try:
+        response = requests.delete(f"{BASE_URL}/ingest", timeout=120)
+    except requests.RequestException:
+        st.error("Could not reach API. Is the server running on port 8000?")
+        st.session_state.clearing = False
+        return
+
+    if response.status_code == 200:
+        st.session_state.codebase_ingested = False
+        st.session_state.last_answer = None
+        st.success("Codebase deleted successfully")
+        st.rerun()
+    elif response.status_code == 409:
+        st.warning("Ingest is still running. Wait for it to finish before clearing.")
+    else:
+        st.error("Error deleting codebase, please try again.")
+
+    st.session_state.clearing = False
+
+
 st.title("RAG-Based Github Repo Search")
 
 sync_ui_state()
 
 if st.session_state.ingesting:
-    poll_ingest_status()
+    with st.spinner("Ingesting codebase... This may take a while for larger repos."):
+        poll_ingest_status()
 
 elif not st.session_state.codebase_ingested:
-    github_url = st.text_input("Enter a GitHub URL:")
+    github_url = st.text_input("Enter a GitHub URL:", disabled=st.session_state.ingesting)
     st.caption("Large codebases may take 10+ minutes to ingest while files are fetched and embedded.")
 
-    if st.button("Search"):
+    if st.button("Search", disabled=st.session_state.ingesting):
         if not github_url:
             st.write("Please enter a GitHub URL.")
         else:
@@ -90,32 +144,36 @@ elif not st.session_state.codebase_ingested:
             else:
                 if response.status_code == 400:
                     st.write("Invalid GitHub URL, please try again.")
-                elif response.status_code == 409:
-                    st.session_state.ingesting = True
-                    st.rerun()
-                elif response.status_code == 202:
+                elif response.status_code in (409, 202):
                     st.session_state.ingesting = True
                     st.rerun()
                 else:
                     st.write("Error starting ingest, please try again.")
 
 else:
-    query = st.text_input("Enter a query:")
-    if st.button("Delete context and ingest a new codebase"):
-        with st.spinner("Clearing ingested codebase..."):
-            response = requests.delete(f"{BASE_URL}/ingest", timeout=120)
-        if response.status_code == 200:
-            st.write("Codebase deleted successfully")
-            st.session_state.codebase_ingested = False
+    busy = st.session_state.retrieving or st.session_state.clearing
+
+    query = st.text_input("Enter a query:", disabled=busy)
+
+    if st.button("Delete context and ingest a new codebase", disabled=busy):
+        st.session_state.clearing = True
+        st.rerun()
+
+    if st.button("Search", disabled=busy):
+        if not query:
+            st.write("Please enter a query.")
+        else:
+            st.session_state.pending_query = query
+            st.session_state.retrieving = True
             st.rerun()
-        elif response.status_code == 409:
-            st.write("Ingest is still running. Wait for it to finish before clearing.")
-        else:
-            st.write("Error deleting codebase, please try again.")
-    if st.button("Search"):
+
+    if st.session_state.clearing:
+        with st.spinner("Clearing ingested codebase..."):
+            run_clear()
+
+    if st.session_state.retrieving and st.session_state.pending_query:
         with st.spinner("Searching codebase and generating an answer..."):
-            response = requests.post(f"{BASE_URL}/retrieve", json={"query": query}, timeout=120)
-        if response.status_code == 200:
-            st.write(response.json()["answer"])
-        else:
-            st.write("Error retrieving answer, please try again.")
+            run_retrieve()
+
+    if st.session_state.last_answer and not st.session_state.retrieving:
+        st.write(st.session_state.last_answer)

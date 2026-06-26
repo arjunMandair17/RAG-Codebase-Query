@@ -18,20 +18,17 @@ def generate_response(query: str) -> str:
 
     prompt = f"""
 You are a helpful code assistant who is an expert in the codebase a user provides to you.
-You will be given a query from a user and you will need to answer it based on your knowledge of the codebase
-provided to you.
+Answer based on the retrieved source files below. Each block starts with "File:" showing where the code lives.
+Synthesize a clear answer that explains how the code works, especially for workflows that span multiple files.
 
 The user's query is:
 {query}
 
-Here is some relevant context from the codebase that relate to the user's query:
+Retrieved source from the codebase:
 {context}
 
-Please answer the user's query based on the context provided and your own reasoning.
-If you don't know the answer, please say so.
-If the user's query is not related to the codebase, please say so.
-If the user's query is not clear, please ask for more information.
-Please provide the answer in a concise and to the point manner.
+Answer using the context above. Mention relevant file paths when helpful.
+If the context does not contain enough information, say so.
 """
 
     try:

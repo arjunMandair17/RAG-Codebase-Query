@@ -28,6 +28,19 @@ LANGUAGES = {
     ".json": "json"
 }
 
+SKIP_INDEX_FILES = {
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "package.json",
+    "readme.md",
+}
+
+
+def _should_skip_file(path: str) -> bool:
+    """Skip lockfiles, package manifests, and README — they drown out source code in retrieval."""
+    return os.path.basename(path).lower() in SKIP_INDEX_FILES
+
 # Skip common non-source directories
 SKIP_DIRS = re.compile(
     r"(^|/)(\.git|node_modules|__pycache__|\.venv|venv|dist|build|vendor|target)(/|$)"
@@ -122,8 +135,15 @@ async def parse_code(github_url: str) -> list[dict]:
                 "language": LANGUAGES.get(ext),
             }
 
-        ## skip package-lock.json, yarn.lock, and pnpm-lock.yaml
-        return list(await asyncio.gather(*[fetch_file(path) for path in paths if not any(path.contains(x) for x in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"])]))
+        return list(
+            await asyncio.gather(
+                *[
+                    fetch_file(path)
+                    for path in paths
+                    if not _should_skip_file(path)
+                ]
+            )
+        )
 
 
 

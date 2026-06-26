@@ -34,6 +34,11 @@ def _dedupe_chunks(chunks: list[dict], stats: dict | None = None) -> list[dict]:
     return unique
 
 
+def _document_text(chunk: dict) -> str:
+    """Format chunk text for embedding so file path improves semantic retrieval."""
+    return f"File: {chunk['path']}\n\n{chunk['text']}"
+
+
 def embed_chunks(chunks: list[dict], stats: dict | None = None) -> bool:
     """Embed and store chunks in Chroma."""
     if not chunks:
@@ -54,7 +59,7 @@ def embed_chunks(chunks: list[dict], stats: dict | None = None) -> bool:
             try:
                 collection.upsert(
                     ids=[_chunk_id(chunk) for chunk in curBatch],
-                    documents=[chunk["text"] for chunk in curBatch],
+                    documents=[_document_text(chunk) for chunk in curBatch],
                     metadatas=[
                         {
                             "path": chunk["path"],
@@ -109,7 +114,7 @@ def query_chunks(query: str) -> list[str]:
     """Query Chroma for chunks similar to the given text."""
     results = collection.query(
         query_texts=[query],
-        n_results=10,
+        n_results=15,
         include=["distances", "documents", "metadatas"],
     )
     return results["documents"][0] if results["documents"] else []
