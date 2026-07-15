@@ -156,6 +156,34 @@ CHUNK_TYPES = {
     "go": {"function_declaration", "method_declaration", "type_declaration"},
 }
 
+
+def _json_chunks(value, path: str, language: str, key: str | None = None, second_key: str | None = None) -> list[dict]:
+    """Flatten JSON values into chunk records."""
+    chunks: list[dict] = []
+
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            chunks.extend(_json_chunks(item, path, language, key=key, second_key=str(index)))
+        return chunks
+
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            chunks.extend(_json_chunks(nested_value, path, language, key=key or nested_key, second_key=nested_key))
+        return chunks
+
+    chunk = {
+        "text": json.dumps(value, indent=2),
+        "path": path,
+        "language": language,
+        "type": "json",
+    }
+    if key is not None:
+        chunk["key"] = key
+    if second_key is not None:
+        chunk["second_key"] = second_key
+    chunks.append(chunk)
+    return chunks
+
 def chunk_code(code: str, language: str | None = None, path: str = "", extension: str = "") -> list[dict]:
     """Chunk code into text + metadata dicts ready for embedding and vector DB storage."""
 
@@ -167,17 +195,7 @@ def chunk_code(code: str, language: str | None = None, path: str = "", extension
 
     ## special case for json files: split into key-value pairs
     if extension == ".json":
-        data = json.loads(code)
-        for key, value in data.items():
-            if isinstance(value, list):
-                for item in value:
-                    chunks.append({"text": json.dumps(item), "path": path, "language": language, "type": "json", "key": key})
-            elif isinstance(value, dict):
-                for second_key, second_value in value.items():
-                    chunks.append({"text": json.dumps(second_value), "path": path, "language": language, "type": "json", "key": key, "second_key": second_key})
-            else:
-                chunks.append({"text": json.dumps({key: value}, indent=2), "path": path, "language": language, "type": "json", "key": key})
-        return chunks
+        return _json_chunks(json.loads(code), path, language)
 
     ## special case for markdown files: split into chunks based on headers
     if extension == ".md":
